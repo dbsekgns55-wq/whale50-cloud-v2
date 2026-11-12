@@ -1,0 +1,49 @@
+기존 Github .github/workflows/whale50-cloud.yml 을 수정할 때 다음 내용을 전체 붙여넣기:
+
+name: Whale50 Cloud Collector and Website
+on:
+  workflow_dispatch:
+  schedule:
+    # UTC: poll each 15m all week. GitHub scheduling is best-effort, not exact.
+    - cron: '7,22,37,52 * * * *'
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+concurrency:
+  group: whale50-cloud
+  cancel-in-progress: false
+jobs:
+  collect-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Collect public data and validate predictions
+        env:
+          WHALE50_SEC_EMAIL: ${{ secrets.WHALE50_SEC_EMAIL }}
+        run: python cloud_run.py
+      - name: Save collector history to repository
+        run: |
+          git config user.name 'whale50-bot'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add data/whale50.sqlite3 site
+          if ! git diff --cached --quiet; then
+            git commit -m 'Update Whale50 public dataset and validation records'
+            git push
+          fi
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - name: Deploy public read-only dashboard
+        id: deployment
+        uses: actions/deploy-pages@v4

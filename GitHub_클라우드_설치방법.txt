@@ -1,0 +1,68 @@
+*** V4 변경사항은 README_V4_바이낸스_24시간.txt를 먼저 확인 ***
+기존 문서의 Yahoo 봉/상위10종목은 V3 설명입니다. V4 신호는 바이낸스 주식 무기한 선물 TOP20 기준입니다.
+
+Whale50 V3 — PC를 꺼도 자료를 쌓는 클라우드 설치 가이드
+============================================================
+
+[중요]
+클라우드는 파일만 내려받는다고 작동하지 않습니다. 아래 1회 설치가
+필요합니다. GitHub 계정이 있어야 하며 계정 연동과 업로드는 직접 합니다.
+GitHub Pages에 게시되는 결과는 공개 웹페이지입니다. 계좌 정보나
+개인 비밀번호를 업로드하지 마세요. SEC 연락용 이메일은 Secrets에만 입력.
+
+1. https://github.com 에 가입/로그인.
+2. New repository에서 whale50-cloud 이름의 Public 저장소 생성.
+   (GitHub Free의 Pages 사용을 위해 공개 저장소를 기준으로 구성.)
+3. 이 ZIP의 'Whale50_Tracker_V3_Work' 폴더 속 *전체 내용*을
+   새 저장소 루트에 올립니다. 특히 아래 파일 경로가 있어야 합니다.
+       .github/workflows/whale50-cloud.yml
+       cloud_run.py
+       whale50.py
+       whale50_signals.py
+       whale50_validation.py
+       dashboard.html
+       managers.json
+   GitHub Desktop으로 폴더를 저장소로 만든 뒤 Publish repository가
+   편리합니다. ZIP을 그대로 업로드하지 말고, 압축을 푼 내부 파일을 올리세요.
+   저장소 안에 별도 중첩 폴더가 생기면 워크플로를 찾지 못합니다.
+4. GitHub 저장소의 Settings → Secrets and variables → Actions
+   → New repository secret에서 이름 WHALE50_SEC_EMAIL을 만들고
+   실제 연락받을 수 있는 이메일 주소를 값으로 입력. 이메일을 파일에
+   직접 쓰지 마세요(공개 저장소일 수 있음).
+5. Settings → Pages → Build and deployment → Source를
+   'GitHub Actions'로 선택.
+6. 상단 Actions 탭에서 'Whale50 Cloud Collector and Website'를 선택,
+   'Run workflow'를 눌러 최초 실행. 권한 요청 시 Actions 허용.
+7. 수집/배포에 성공하면 Settings → Pages의 링크를 열어 확인.
+   일반적으로 https://계정명.github.io/whale50-cloud/ 형식이지만
+   실제 주소는 GitHub가 화면에 표시한 것을 사용하세요.
+
+[자동 수집 방식]
+- GitHub Actions는 UTC 기준 평일 약 15분 간격으로 실행하도록 설정.
+- 15분봉 데이터는 갱신마다, 1시간봉은 대략 매시간, 일·주·월봉은
+  대략 하루 1번 확인하며, 신규 SEC 공시는 대략 하루 1번 확인.
+- 저장은 data/whale50.sqlite3 (공개 시장 데이터, Git 저장소에 누적).
+- site/index.html과 data.json/signals.json/performance.json은
+  방문자가 보는 읽기 전용 웹페이지를 자동 갱신하기 위한 결과 파일.
+- 이미 기록된 예측이 있어야 다음 봉 확정 후 '실시간 누적 적중'에 반영.
+- 처음 시작할 때 저장된 과거 신호는 실시간 예측으로 소급하지 않음.
+- 월봉 실제 판정에는 다음 달의 완료봉이 필요합니다.
+- TOP10 대상이 바뀌면 기존 기록은 DB에 유지되지만 현재 TOP10만 표시.
+
+[한계 및 오류]
+- GitHub 예약 실행은 정확한 시각이 보장되지 않습니다. 지연 또는
+  실행 누락이 생길 수 있고, 중단되면 PC가 꺼진 상태에서는 데이터가
+  쌓이지 않습니다. GitHub는 비활성 공개 저장소의 예약 실행을 60일
+  동안 활동이 없으면 자동 중지할 수 있습니다.
+- Yahoo의 비공식 API 접근이 막히거나 호출 제한이 걸리면 일부 봉이
+  업데이트되지 않을 수 있습니다. SEC 또한 접속 제약이 있을 수 있습니다.
+- 정확히 15분마다 빠짐없이 기록하려면 안정적 데이터 API와 별도
+  운영 서버/모니터링을 권장합니다. 이 프로젝트는 저비용 시작용 예제입니다.
+- 미국 주식 13F 공시는 당일 매수 내역이 아니라 분기말 보유 공시입니다.
+- 저장소 및 웹페이지의 공개 범위에 유의하세요.
+- GitHub의 요금/정책은 추후 달라질 수 있습니다.
+
+[설치 후 확인]
+GitHub > Actions 실행 기록에서 오류가 없는지 확인하세요.
+웹사이트의 '수집 오류·상태' 탭에서 SEC 공시 오류를 확인하세요.
+시세 오류는 'TOP 10 · 7개 봉 롱/숏·일목' 탭에서 확인합니다.
