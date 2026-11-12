@@ -121,17 +121,18 @@ def rsi(values,period=14):
     return 100-100/(1+up/dn)
 
 
-def ichimoku(bars):
-    """Ichimoku 9/26/52 + 26 displacement, using completed bars ONLY.
+def ichimoku(bars, *, allow_partial=False):
+    """Ichimoku 9/26/52 and 26-bar shift, strictly completed bars only.
 
-    The cloud visible *at current bar t* is comprised of Senkou spans
-    calculated at t-26 (then shifted 26 bars forward on the chart).
-    The Chikou span is current close plotted at t-26; its position is
-    compared with the price range at that historical bar. This method
-    does not read any future prices.
+    78 bars are needed for the full *currently visible* displaced cloud.
+    With 52--77 monthly bars, only the current Tenkan/Kijun, projected
+    cloud and Chikou comparisons are computable. The current cloud is
+    unavailable, and its score is explicitly omitted (never fabricated).
     """
-    if len(bars)<78:
-        return {'status':'insufficient','reason':'일목균형표 계산에 최소 78개 완료봉 필요'}
+    n=len(bars)
+    partial=52 <= n < 78 and allow_partial
+    if n<78 and not partial:
+        return {'status':'insufficient','reason':'현재 구름대 포함 일목균형표는 완료봉 78개 필요'}
 
     def midpoint(seq):
         return (max(x['h'] for x in seq)+min(x['l'] for x in seq))/2
@@ -144,15 +145,20 @@ def ichimoku(bars):
     projected_b=midpoint(bars[-52:])
     # Index -27 corresponds to the last bar 26 periods before the latest.
     past=bars[:-26]
-    visible_a=(midpoint(past[-9:])+midpoint(past[-26:]))/2
-    visible_b=midpoint(past[-52:])
     close=float(bars[-1]['c'])
-    if close>max(visible_a,visible_b):
-        cloud_position='구름 위';cloud_score=10
-    elif close<min(visible_a,visible_b):
-        cloud_position='구름 아래';cloud_score=-10
+    if partial:
+        # 52--77 bars cannot support Senkou B at t-26 (needs 52 earlier bars).
+        visible_a=visible_b=None
+        cloud_position='현재 구름 계산 불가';cloud_score=0
     else:
-        cloud_position='구름 안';cloud_score=0
+        visible_a=(midpoint(past[-9:])+midpoint(past[-26:]))/2
+        visible_b=midpoint(past[-52:])
+        if close>max(visible_a,visible_b):
+            cloud_position='구름 위';cloud_score=10
+        elif close<min(visible_a,visible_b):
+            cloud_position='구름 아래';cloud_score=-10
+        else:
+            cloud_position='구름 안';cloud_score=0
     if tenkan>kijun:tk='전환선 우세';tk_score=5
     elif tenkan<kijun:tk='기준선 우세';tk_score=-5
     else:tk='전환·기준 동률';tk_score=0
@@ -166,22 +172,24 @@ def ichimoku(bars):
         projected='음운';projection_score=-2
     else:
         projected='중립';projection_score=0
-    def price(v):return round(v,4)
-    return {'status':'ok','cloud_position':cloud_position,
-            'cloud_top':price(max(visible_a,visible_b)),
-            'cloud_bottom':price(min(visible_a,visible_b)),
+    def price(v):return round(v,4) if v is not None else None
+    return {'status':'partial' if partial else 'ok','cloud_position':cloud_position,
+            'cloud_top':price(max(visible_a,visible_b)) if not partial else None,
+            'cloud_bottom':price(min(visible_a,visible_b)) if not partial else None,
             'tenkan':price(tenkan),'kijun':price(kijun),'tk_status':tk,
             'chikou_status':chikou,'future_cloud':projected,
             'span_a_now':price(visible_a),'span_b_now':price(visible_b),
             'projected_span_a':price(projected_a),'projected_span_b':price(projected_b),
             'score':cloud_score+tk_score+chikou_score+projection_score,
-            'shift_bars':26}
+            'shift_bars':26,
+            'note':f'완료봉 {n}개: 전환선/기준선/후행스팬/선행구름 계산; 현재 구름대는 78개부터' if partial else ''}
 
 
 def indicator(bars,frame):
     """Indicator directional balance (not forecast odds or proven win rate)."""
-    if len(bars)<78:
-        return {'status':'insufficient','reason':f'완료봉 {len(bars)}개 / 일목균형표 포함 분석은 78개 필요'}
+    minimum=52 if frame=='1mo' else 78
+    if len(bars)<minimum:
+        return {'status':'insufficient','reason':f'완료봉 {len(bars)}개 / 분석에 최소 {minimum}개 필요'}
     c=[float(x['c']) for x in bars]
     e12=ema(c[-160:],12)
     e26=ema(c[-160:],26)
@@ -197,7 +205,9 @@ def indicator(bars,frame):
     level=10 if c[-1]>e20 else -10 if c[-1]<e20 else 0.
     strength=12*max(-1.,min(1.,(val_rsi-50.)/30.))
     impulse=8*max(-1.,min(1.,momentum/(movement*4)))
-    ichi=ichimoku(bars)
+    ichi=ichimoku(bars,allow_partial=(frame=='1mo'))
+    # No imputation or boost for the 10-point current-cloud component missing
+    # from partial monthly history; comparison with full 78+ bar signals is limited.
     long=round(max(15.,min(85.,50+trend+level+strength+impulse+ichi['score'])))
     short=100-long
     if long>=60:side='롱 우세'
@@ -206,7 +216,9 @@ def indicator(bars,frame):
     last=datetime.fromtimestamp(bars[-1]['t'],timezone.utc).isoformat(timespec='minutes')
     return {'status':'ok','frame':frame,'long':long,'short':short,'side':side,
             'rsi':round(val_rsi,1),'last_close':round(c[-1],4),
-            'last_bar_utc':last,'bar_count':len(bars),'ichimoku':ichi}
+            'last_bar_utc':last,'bar_count':len(bars),'ichimoku':ichi,
+            'partial':ichi['status']=='partial',
+            'quality_note':ichi.get('note','')}
 
 
 def build_signals(sources):
