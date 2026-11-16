@@ -20,7 +20,7 @@ ROOT=Path(__file__).resolve().parent
 SITE=ROOT/'site'
 
 
-def has_fresh_sec(con, hours=22):
+def has_fresh_sec(con, hours=4):
     last=con.execute('SELECT MAX(checked) FROM checks').fetchone()[0]
     if not last:return False
     try:
@@ -38,6 +38,26 @@ def update_market(con):
 def export_site():
     SITE.mkdir(exist_ok=True)
     payload=whale50.get_payload()
+    # GitHub Actions starts a fresh Python process on every run. The in-memory
+    # job.finished flag resets; recover the SEC check time from the persistent DB.
+    check_con=whale50.db_open()
+    try:
+        last_checked, checked_count, error_count=check_con.execute(
+            "SELECT MAX(checked), COUNT(*), SUM(CASE WHEN COALESCE(error, '') <> '' THEN 1 ELSE 0 END) FROM checks"
+        ).fetchone()
+        latest_filing=check_con.execute('SELECT MAX(filed) FROM filings').fetchone()[0]
+    finally:
+        check_con.close()
+    check=payload.setdefault('check',{})
+    if last_checked and not check.get('finished'):
+        check['finished']=last_checked
+        check['done']=checked_count
+        check['errors']=error_count or 0
+        check['message']='SEC 점검 기록 불러옴'
+    print('SEC STATUS: last checked',last_checked or 'none',
+          '/ latest filing',latest_filing or 'none',
+          '/ manager check records',checked_count or 0,
+          '/ errors',error_count or 0)
     payload['config']={'configured':True}
     signals=whale50.signal_view()
     performance=whale50.performance_view()
